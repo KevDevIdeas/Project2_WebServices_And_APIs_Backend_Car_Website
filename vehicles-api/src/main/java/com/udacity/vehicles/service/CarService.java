@@ -51,16 +51,10 @@ public class CarService {
          * DONE: Find the car by ID from the `repository` if it exists. --> repository.findById(id); returns optional.
          *   If it does not exist, throw a CarNotFoundException --> if optional is empty
          */
-        Car car = new Car();
 
         Optional<Car> optionalCar = repository.findById(id);
+        Car car = optionalCar.orElseThrow(()-> new CarNotFoundException());
 
-
-        if (optionalCar.isPresent()) {
-            car = optionalCar.get();
-        } else {
-            throw new CarNotFoundException();
-        }
 
         /*
          * DONE: Use the Pricing Web client you create in `VehiclesApiApplication`
@@ -84,7 +78,7 @@ public class CarService {
         return car;
     }
 
-    /**
+    /**we
      * Either creates or updates a vehicle, based on prior existence of car
      * @param car A car object, which can be either new or existing
      * @return the new/updated car is stored in the repository

@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.udacity.vehicles.client.maps.MapsClient;
 import com.udacity.vehicles.client.prices.PriceClient;
 import com.udacity.vehicles.domain.Condition;
@@ -19,8 +21,13 @@ import com.udacity.vehicles.domain.car.Car;
 import com.udacity.vehicles.domain.car.Details;
 import com.udacity.vehicles.domain.manufacturer.Manufacturer;
 import com.udacity.vehicles.service.CarService;
+
+import java.io.File;
 import java.net.URI;
 import java.util.Collections;
+import java.util.List;
+
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -33,6 +40,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 /**
  * Implements testing of the CarController class.
@@ -49,6 +57,9 @@ public class CarControllerTest {
     @Autowired
     private JacksonTester<Car> json;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @MockBean
     private CarService carService;
 
@@ -64,7 +75,6 @@ public class CarControllerTest {
     @Before
     public void setup() {
         Car car = getCar();
-        car.setId(1L);
         given(carService.save(any())).willReturn(car);
         given(carService.findById(any())).willReturn(car);
         given(carService.list()).willReturn(Collections.singletonList(car));
@@ -77,12 +87,21 @@ public class CarControllerTest {
     @Test
     public void createCar() throws Exception {
         Car car = getCar();
-        mvc.perform(
+        String expectedCarJsonRepresentation = json.write(car).getJson();
+
+        MvcResult mvcResult = mvc.perform(
                 post(new URI("/cars"))
                         .content(json.write(car).getJson())
                         .contentType(MediaType.APPLICATION_JSON_UTF8)
                         .accept(MediaType.APPLICATION_JSON_UTF8))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        Car obtainedCar = json.parseObject(mvcResult.getResponse().getContentAsString());
+        String obtainedCarJsonRepresentation = json.write(obtainedCar).getJson();
+
+        // assert that obtained = expected (String comparison)
+        Assert.assertEquals(expectedCarJsonRepresentation, obtainedCarJsonRepresentation);
     }
 
     /**
@@ -91,11 +110,43 @@ public class CarControllerTest {
      */
     @Test
     public void listCars() throws Exception {
-        /**
-         * TODO: Add a test to check that the `get` method works by calling
-         *   the whole list of vehicles. This should utilize the car from `getCar()`
-         *   below (the vehicle will be the first in the list).
+        /*
+         DONE: Add a test to check that the `get` method works by calling
+         the whole list of vehicles. This should utilize the car from `getCar()`
+         below (the vehicle will be the first in the list).
          */
+        ObjectMapper objectmapper = new ObjectMapper();
+
+        // Get Expected Car and creating Json Representation of object
+        Car expectedCar = getCar();
+        String expectedCarJson = objectmapper.writeValueAsString (expectedCar);
+
+        /* Other Way to do the serialization with JacksonTester:
+         String expectedCarJson = json.write(expectedCar).getJson();
+         */
+
+        //calling controller
+        MvcResult response = mvc.perform(get(new URI("/cars")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        //Getting Response in form Json
+        String stringResponse= response.getResponse().getContentAsString();
+        //Getting first object of Json response by using it as JsonNode (objectMapper.readTree)
+        String obtainedCarJsonRepresentationWithHateoas = objectMapper.readTree(stringResponse)
+                .get("_embedded").get("carList").get(0).toString();
+        // Removing from single Json object the _links (from Hateoas) by deserializing it to car object and then serialize it again
+        Car actualCar = json.parseObject(obtainedCarJsonRepresentationWithHateoas);
+        String actualCarJsonRepresentation = json.write(actualCar).getJson();
+
+        /* AssertJ to check if it's the same: json String as to be checked because the two objects are not the same:
+        Expected :com.udacity.vehicles.domain.car.Car@48b1b469
+        Actual   :com.udacity.vehicles.domain.car.Car@6a887649
+         */
+        Assert.assertEquals(expectedCarJson, actualCarJsonRepresentation);
+
+
+
 
     }
 
@@ -105,10 +156,34 @@ public class CarControllerTest {
      */
     @Test
     public void findCar() throws Exception {
-        /**
-         * TODO: Add a test to check that the `get` method works by calling
-         *   a vehicle by ID. This should utilize the car from `getCar()` below.
+        /*
+         DONE: Add a test to check that the `get` method works by calling
+         a vehicle by ID. This should utilize the car from `getCar()` below.
          */
+        ObjectMapper objectmapper = new ObjectMapper();
+
+        // Get Expected Car and creating Json Representation of object
+        Car expectedCar = getCar();
+        String expectedCarJson = objectmapper.writeValueAsString (expectedCar);
+
+
+        //calling controller
+        MvcResult response = mvc.perform(get(new URI("/cars/1")))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        //Getting Response in form Json
+        String stringResponse= response.getResponse().getContentAsString();
+        // Removing from single Json object the _links (from Hateoas) by deserializing it to car object and then serialize it again
+        Car actualCar = json.parseObject(stringResponse);
+        String actualCarJsonRepresentation = json.write(actualCar).getJson();
+
+        /* AssertJ to check if it's the same: json String as to be checked because the two objects are not the same:
+        Expected :com.udacity.vehicles.domain.car.Car@48b1b469
+        Actual   :com.udacity.vehicles.domain.car.Car@6a887649
+         */
+        Assert.assertEquals(expectedCarJson, actualCarJsonRepresentation);
+
     }
 
     /**
@@ -117,11 +192,19 @@ public class CarControllerTest {
      */
     @Test
     public void deleteCar() throws Exception {
-        /**
-         * TODO: Add a test to check whether a vehicle is appropriately deleted
-         *   when the `delete` method is called from the Car Controller. This
-         *   should utilize the car from `getCar()` below.
+        /*
+         DONE: Add a test to check whether a vehicle is appropriately deleted
+         when the `delete` method is called from the Car Controller. This
+         should utilize the car from `getCar()` below.
          */
+
+        Car expectedCarToDelete = getCar();
+
+
+        //calling controller
+       mvc.perform(delete(new URI("/cars/" + expectedCarToDelete.getId())))
+                .andExpect(status().isNoContent());
+
     }
 
     /**
@@ -130,6 +213,7 @@ public class CarControllerTest {
      */
     private Car getCar() {
         Car car = new Car();
+        car.setId(1L);
         car.setLocation(new Location(40.730610, -73.935242));
         Details details = new Details();
         Manufacturer manufacturer = new Manufacturer(101, "Chevrolet");
